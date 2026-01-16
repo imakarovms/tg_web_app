@@ -1,33 +1,50 @@
-from sqlalchemy import ForeignKey, String, BigInteger
-from sqlalchemy.orm import Mapped, DeclarativeBase, mapped_column
-from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy.orm import relationship
+from database import Base
+from datetime import datetime
 
-
-engine = create_async_engine(url='sqlite+aiosqlite:///db.sqlite3', echo=True)
-
-async_session = async_sessionmaker(bind=engine, expire_on_commit=False)
-
-
-class Base(AsyncAttrs, DeclarativeBase):
-    pass
-
-
-class User(Base):
-    __tablename__ = 'users'
+class Product(Base):
+    __tablename__ = "products"
     
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id = mapped_column(BigInteger)
-
-
-class Task(Base):
-    __tablename__ = 'tasks'
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    price = Column(Float, nullable=False)
+    stock = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
-    id: Mapped[int] = mapped_column(primary_key=True)
-    title: Mapped[str] = mapped_column(String(128))
-    completed: Mapped[bool] = mapped_column(default=False)
-    user: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))
+    cart_items = relationship("CartItem", back_populates="product")
 
+class Cart(Base):
+    __tablename__ = "carts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_user_id = Column(Integer, unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    items = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
 
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+class CartItem(Base):
+    __tablename__ = "cart_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    cart_id = Column(Integer, ForeignKey("carts.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+    
+    cart = relationship("Cart", back_populates="items")
+    product = relationship("Product", back_populates="cart_items")
+
+class Order(Base):
+    __tablename__ = "orders"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_user_id = Column(Integer, nullable=False)
+    total_amount = Column(Float, nullable=False)
+    status = Column(String(20), default="pending")  # pending, completed, cancelled
+    items_data = Column(Text)  # JSON serialized items
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
